@@ -1,2 +1,6 @@
 .venv
+.vscode
 db.sqlite3
+*.pyc
+centcols/migrations
+static/js/node_modules
