@@ -444,6 +444,87 @@ class Activity(models.Model):
         return False
 
 
+    def compute_durability(self, indicator) -> bool:
+        """
+        Calculate durability power for a given DurabilityIndicator.
+
+        Finds the best average power over indicator.duration_seconds, but only
+        considering windows that start after indicator.energy_threshold_kj has
+        been spent. Energy is either the direct cumulative watt-seconds, or the
+        cumulative sum of a 30s rolling average (normalized power approximation).
+        """
+        from .models import DurabilityResult
+
+        time_stream = Stream.objects.filter(activity=self, metric='time').first()
+        watts_stream = Stream.objects.filter(activity=self, metric='watts').first()
+
+        if not time_stream or not watts_stream:
+            logger.warning("No time or watts stream for activity %s", self.id)
+            return False
+
+        try:
+            time_data = pickle.loads(base64.b64decode(time_stream.data))
+            watts_data = pickle.loads(base64.b64decode(watts_stream.data))
+        except Exception as e:
+            logger.error("Error loading streams for activity %s: %s", self.id, e)
+            return False
+
+        if len(time_data) == 0 or len(time_data) != len(watts_data):
+            return False
+
+        # Build dense 1-sample-per-second power array
+        max_time = int(np.max(time_data))
+        dense_watts = np.zeros(max_time + 1)
+        for t, w in zip(time_data, watts_data):
+            dense_watts[int(t)] = w
+
+        # Cumulative energy in kJ used to detect when the threshold is crossed.
+        if indicator.energy_mode == 'normalized_power':
+            # NP-based cumulative energy: E(t) = NP(0..t) × (t+1) / 1000
+            # where NP(0..t) = (mean(p_30(t')^4 for t'=0..t))^(1/4)
+            #
+            # Causal 30s rolling average: convolve with mode='full' and take first n
+            # samples — this pads with zeros at the start (first 29s use fewer samples).
+            p_30 = np.convolve(dense_watts, np.ones(30) / 30, mode='full')[:len(dense_watts)]
+            cumsum_4th = np.cumsum(p_30 ** 4)
+            t_range = np.arange(1, len(dense_watts) + 1, dtype=float)
+            # (cumsum_4th / t_range)^(1/4) × t_range / 1000 = cumsum_4th^(1/4) × t_range^(3/4) / 1000
+            cumulative_kj = (cumsum_4th ** 0.25) * (t_range ** 0.75) / 1000.0
+        else:
+            # Direct cumulative energy: watts × 1s = joules, /1000 = kJ
+            cumulative_kj = np.cumsum(dense_watts) / 1000.0
+
+        threshold_indices = np.where(cumulative_kj >= indicator.energy_threshold_kj)[0]
+        if len(threshold_indices) == 0:
+            logger.info("Activity %s never reaches %.1f kJ threshold", self.id, indicator.energy_threshold_kj)
+            return False
+
+        threshold_idx = int(threshold_indices[0])
+        remaining = dense_watts[threshold_idx:]
+
+        duration = indicator.duration_seconds
+        if len(remaining) < duration:
+            logger.info("Activity %s: not enough data after threshold for %ds window", self.id, duration)
+            return False
+
+        # Best window using cumsum (same approach as compute_cp_curve)
+        cumsum = np.concatenate([[0.], np.cumsum(remaining)])
+        n = len(remaining)
+        window_sums = cumsum[duration:] - cumsum[:n - duration + 1]
+        best_idx = int(np.argmax(window_sums))
+        best_power = float(window_sums[best_idx]) / duration
+
+        DurabilityResult.objects.update_or_create(
+            activity=self,
+            indicator=indicator,
+            defaults={
+                'power_watts': best_power,
+                'start_time_seconds': threshold_idx + best_idx,
+            }
+        )
+        logger.info("Durability result activity %s / indicator %s: %.1f W", self.id, indicator.id, best_power)
+        return True
+
     def verify_deleted(self):
         """Verify if activity has been deleted in Strava."""
         service = StravaService()

@@ -15,9 +15,7 @@ import os
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/3.0/howto/deployment/checklist/
+env = os.environ
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env['DJANGO_SECRET_KEY']
@@ -131,7 +129,6 @@ STATICFILES_DIRS = (
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-env = os.environ
 STRAVA_CLIENT_ID = env['STRAVA_CLIENT_ID']
 STRAVA_CLIENT_SECRET = env['STRAVA_CLIENT_SECRET']
 STRAVA_ACCESS_TOKEN = env['STRAVA_ACCESS_TOKEN']

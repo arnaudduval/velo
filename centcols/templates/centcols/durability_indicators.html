@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Indicateurs de durabilité{% endblock %}
+{% block content %}
+
+<h2>Indicateurs de durabilité</h2>
+
+<table class="list_table">
+    <thead>
+        <tr>
+            <th>Nom</th>
+            <th>Durée</th>
+            <th>Énergie min.</th>
+            <th>Mode</th>
+            <th>Résultats</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for indicator in indicators %}
+        <tr>
+            <td><a href="{% url 'durability_indicator_detail' indicator.id %}">{{ indicator.name }}</a></td>
+            <td>{{ indicator.duration_seconds }} s</td>
+            <td>{{ indicator.energy_threshold_kj }} kJ</td>
+            <td>{{ indicator.get_energy_mode_display }}</td>
+            <td>{{ indicator.result_count }}</td>
+            <td>
+                <form method="post" action="{% url 'delete_durability_indicator' indicator.id %}" style="display:inline">
+                    {% csrf_token %}
+                    <button type="submit" onclick="return confirm('Supprimer cet indicateur et ses résultats ?')">Supprimer</button>
+                </form>
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6">Aucun indicateur défini.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h3>Nouvel indicateur</h3>
+<form method="post">
+    {% csrf_token %}
+    <table>
+        {% for field in form %}
+        <tr>
+            <td><label for="{{ field.id_for_label }}">{{ field.label }}</label></td>
+            <td>{{ field }}</td>
+            {% if field.errors %}<td style="color:red">{{ field.errors }}</td>{% endif %}
+        </tr>
+        {% endfor %}
+    </table>
+    <button type="submit">Créer</button>
+</form>
+
+<p style="margin-top:16px">
+    Pour calculer les résultats :
+    <a href="{% url 'maintenance_action' 'compute_durability' %}">Exécuter le calcul de durabilité</a>
+</p>
+
+{% endblock %}

@@ -1,6 +1,5 @@
 from django import forms
-from django.utils import timezone
-from .models import GearMaintenanceManager
+from .models import GearMaintenanceManager, DurabilityIndicator
 
 class ImportOSMForm(forms.Form):
     minLat = forms.FloatField(min_value=-90., max_value=90.)
@@ -55,4 +54,16 @@ class AddGearMaintenance(forms.Form):
         widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
         required=False
     )
+
+
+class DurabilityIndicatorForm(forms.ModelForm):
+    class Meta:
+        model = DurabilityIndicator
+        fields = ['name', 'duration_seconds', 'energy_threshold_kj', 'energy_mode']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'duration_seconds': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
+            'energy_threshold_kj': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': '0.1'}),
+            'energy_mode': forms.Select(attrs={'class': 'form-control'}),
+        }
 

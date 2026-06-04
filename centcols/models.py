@@ -110,14 +110,43 @@ class GearMaintenanceManager(models.Model):
     def get_elapsed_hours_km(self):
         return 0
 
-class DurabilityPower(models.Model):
-    """
-    Class representing critical power after a given energy expenditure
-    """
-    duration_seconds = models.IntegerField(default=0)
-    power_watts = models.IntegerField(default=0)
-    energy_kJ = models.IntegerField(default=0)
+class DurabilityIndicator(models.Model):
+    """User-defined durability test: best power over duration_seconds after energy_threshold_kj spent."""
+    name = models.CharField(max_length=255, verbose_name="Nom")
+    duration_seconds = models.PositiveIntegerField(verbose_name="Durée de la fenêtre (s)")
+    energy_threshold_kj = models.FloatField(verbose_name="Énergie minimale avant la fenêtre (kJ)")
 
+    ENERGY_MODE_CHOICES = [
+        ('power', 'Puissance directe'),
+        ('normalized_power', 'Puissance normalisée (moy. glissante 30s)'),
+    ]
+    energy_mode = models.CharField(
+        max_length=20,
+        choices=ENERGY_MODE_CHOICES,
+        default='power',
+        verbose_name="Mode de calcul de l'énergie",
+    )
+
+    class Meta:
+        verbose_name = "Indicateur de durabilité"
+        verbose_name_plural = "Indicateurs de durabilité"
+
+    def __str__(self):
+        mode = "NP" if self.energy_mode == 'normalized_power' else "W"
+        return f"{self.name} ({self.duration_seconds}s après {self.energy_threshold_kj:.0f} kJ {mode})"
+
+
+class DurabilityResult(models.Model):
+    """Best power found for a given DurabilityIndicator on a given Activity."""
+    activity = models.ForeignKey('Activity', on_delete=models.CASCADE, related_name='durability_results')
+    indicator = models.ForeignKey(DurabilityIndicator, on_delete=models.CASCADE, related_name='results')
+    power_watts = models.FloatField(verbose_name="Puissance (W)")
+    start_time_seconds = models.IntegerField(verbose_name="Début de la fenêtre dans l'activité (s)")
+
+    class Meta:
+        unique_together = [('activity', 'indicator')]
+        verbose_name = "Résultat de durabilité"
+        verbose_name_plural = "Résultats de durabilité"
 
 
 class Col(models.Model):

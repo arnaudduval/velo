@@ -1,21 +1,42 @@
 {% extends "base.html" %}
-{% load mathfilters %}
-{% load formatSeconds %}
-{% load static %}
 {% block title %}Maintenance{% endblock %}
 {% block content %}
-<a href={% url 'maintenance' 1 %}>Récupèrer les détails + cols des activités "Ride" (sans commute)</a><br>
-<a href={% url 'maintenance' 2 %}>Récupèrer les streams des activités "Ride" (sans commute)</a><br>
-<a href={% url 'maintenance' 9 %}>Recupèrer les détails des matériels</a><br>
-<a href={% url 'maintenance' 4 %}>Scanner les activités avec détails pour trouver les cols</a><br>
-<a href={% url 'maintenance' 5 %}>Calculer les courbes CP</a><br>
-<a href={% url 'maintenance' 6 %}>Chercher les tuiles (zoom 14)</a><br>
-<a href={% url 'maintenance' 8 %}>Mettre à jour les activités modifiées</a>
 
-<br>
-<br>
+<h2>Maintenance</h2>
 
-<a href={% url 'maintenance' 3 %}>Supprimer tous les cols des activités</a><br>
+{% if result %}
+<div class="maintenance-result">
+    <strong>{{ executed_action.label }} :</strong> {{ result }}
+</div>
+{% endif %}
 
-<a href={% url 'maintenance' 7 %}>Nettoyer les tiles</a><br>
+<table class="list_table">
+    <thead>
+        <tr>
+            <th>Action</th>
+            <th>Description</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for key, action in actions.items %}
+        <tr {% if action.dangerous %}class="danger-row"{% endif %}>
+            <td>{{ action.label }}</td>
+            <td>{{ action.description }}</td>
+            <td>
+                <a href="{% url 'maintenance_action' key %}"
+                   {% if action.dangerous %}onclick="return confirm('Cette action est irréversible. Continuer ?')"{% endif %}>
+                    {% if action.dangerous %}⚠ {% endif %}Exécuter
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<style>
+    .danger-row td { color: #c00; }
+    .maintenance-result { background: #eaffea; border: 1px solid #6a6; padding: 8px 12px; margin-bottom: 16px; }
+</style>
+
 {% endblock %}

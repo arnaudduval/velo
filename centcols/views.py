@@ -7,14 +7,14 @@ from django.http import HttpResponse, Http404
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count, Q, Max
 from django.contrib import messages
 from django.urls import reverse
 from datetime import datetime
 from .activity import Activity
-from .models import Col, OSMImport, Stream, Tile, Gear, GearMaintenanceManager
-from .forms import ImportOSMForm, ImportStravaForm, AddGearMaintenance
-from .actions import retrieve_and_save_activities, add_maintenance
+from .models import Col, OSMImport, Stream, Tile, Gear, GearMaintenanceManager, DurabilityIndicator, DurabilityResult
+from .forms import ImportOSMForm, ImportStravaForm, AddGearMaintenance, DurabilityIndicatorForm
+from .actions import retrieve_and_save_activities, add_maintenance, MAINTENANCE_ACTIONS
 from .passes import retrieve_and_save_passes
 
 #import centcols_tools
@@ -506,142 +506,97 @@ def sync_maintenance_view(request, maint_id):
     # print(service.gear.id)
     return redirect(reverse('gear_details', args=[service.gear.id]))
 
-def maintenance(request, action):
-    """Différentes options de maintenance"""
-    if action==1:
-        # Récup' détail des activités Ride, VirtualRide et non commute
-        activities = Activity.objects.filter(Q(Type="Ride")|Q(Type="VirtualRide"), commute=False, detailsHandled=False).order_by('startDate')
-        for activity in activities:
-            if not activity.detailsHandled:
-                print(activity.name)
-                if not activity.scan():
-                    # break
-                    continue       # Permet d'éviter un arrêt lorsque l'activité n'a pas de polyline (cas des activité HT)
-                    # TODO Tester aussi indoor, trainer, manual, etc.
-    if action==2:
-        # Récup' streams des activités Ride et non commute
-        activities = Activity.objects.filter(Q(Type="Ride")|Q(Type="VirtualRide"), commute=False,streamsHandled=False).order_by('startDate')
-        for activity in activities:
-            if not activity.streamsHandled:
-                print(activity.name)
-                if not activity.get_streams():
-                    break
-    if action==3:
-        # Supprime tous les cols des activités Ride
-        activities = Activity.objects.filter(Type="Ride", commute=False,colsHandled=True).order_by('startDate')
-        for activity in activities:
-            cols = activity.climbs.all()
-            for col in cols:
-                activity.climbs.remove(col)
-            activity.colsHandled = False
-            activity.save()
+def maintenance(request, action=None):
+    """Page de maintenance : affiche les actions disponibles et exécute celle demandée."""
+    result = None
+    executed_action = None
 
-        # Suppression des cols
-        Col.objects.all().delete()
+    if action:
+        if action in MAINTENANCE_ACTIONS:
+            executed_action = MAINTENANCE_ACTIONS[action]
+            result = executed_action['fn']()
+        else:
+            messages.error(request, f"Action inconnue : {action}")
 
-        # Suppression des imports OSM
-        OSMImport.objects.all().delete()
-
-    if action==4:
-        # Scanne les activités avec détails pour trouver les cols
-        activities = Activity.objects.filter(Type="Ride", commute=False,detailsHandled=True,colsHandled=False).order_by('startDate')
-        for activity in activities:
-            activity.do_check_passes()
-
-    if action==5:
-        # Calcul des courbes CP des activités Ride et VirtualRide
-        activities = Activity.objects.filter(Q(Type="Ride")|Q(Type="VirtualRide"), commute=False, streamsHandled=True, cp_curveHandled=False).order_by('startDate')
-        for activity in activities:
-            print(f'{activity.name =}')
-            activity.compute_cp_curve()
-
-    if action==6:
-        # Cherche les tuiles des activités Ride
-        activities = Activity.objects.filter(Type="Ride", tilesHandled=False, detailsHandled=True).order_by('startDate')
-        #activities = Activity.objects.filter(Type="Ride", detailsHandled=True).order_by('startDate')
-        for activity in activities:
-            print(activity.name)
-            activity.do_check_tiles(zoom=14)
-
-    if action==7:
-        # Supprime toutes les tuiles des activités Ride
-        activities = Activity.objects.filter(Type="Ride", commute=False,tilesHandled=True).order_by('startDate')
-        for activity in activities:
-            tiles = activity.visited_tiles.all()
-            for tile in tiles:
-                activity.visited_tiles.remove(tile)
-            activity.tilesHandled = False
-            activity.save()
-
-        # Suppression des cols
-        Tile.objects.all().delete()
-
-    if action==8:
-        from django.db.models import Max, Min
-        # Recherche et mise à jour des activités modifiées
-        before = Activity.objects.aggregate(Max('startDate'))
-        # after = Activity.objects.aggregate(Min('startDate'))
-        import ciso8601
-        import time
-        ts = ciso8601.parse_datetime("20260101")
-        # to get time in seconds:
-        after = time.mktime(ts.timetuple())
-
-        #TODO coder une action à part
-        from services.strava_service import StravaService
-        service = StravaService()
-
-        page = 0
-        per_page = 200
-        max_page = 1000
-        modified_activities_id = []
-
-        while True:
-            page = page + 1
-            if page > max_page:
-                break
-            activities = service.get_activities(page=page, per_page=per_page,
-                                                before=before['startDate__max'].timestamp(),
-                                                after=after)
-            if len(activities) == 0:
-                print('no activity returned')
-                break
-            print(len(activities), "activities returned from Strava")
-
-            #TODO Faire une méthode à part dans la classe Activity
-            for activity_data in activities:
-                #print(activity['name'])
-                # Compare with activity in database
-                q = Activity.objects.filter(stravaId=activity_data['id'])
-                if q.exists():
-                    a = q[0]
-                    modified = a.check_modified(activity_data)
-                    if modified:
-                        logger.info("Activity %s (%s) has been modified.", activity_data['id'], activity_data['name'])
-                        modified_activities_id.append(activity_data['id'])
-                else:
-                    print("Activity ",activity_data['id']," is not in database ???")
+    return render(request, 'centcols/maintenance.html', {
+        'actions': MAINTENANCE_ACTIONS,
+        'result': result,
+        'executed_action_key': action,
+        'executed_action': executed_action,
+    })
 
 
-            print(modified_activities_id)
-            print(len(modified_activities_id))
-            for id in modified_activities_id:
-                q = Activity.objects.filter(stravaId=id)
-                if q.exists():
-                    print("Mise à jour...")
-                    a = q[0]
-                    a.update()
-            modified_activities_id = []
+def list_durability_indicators(request):
+    """Liste les indicateurs de durabilité et permet d'en créer un nouveau."""
+    if request.method == 'POST':
+        form = DurabilityIndicatorForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Indicateur créé.")
+            return redirect(reverse('list_durability_indicators'))
+    else:
+        form = DurabilityIndicatorForm()
 
-    if action==9:
-        # Récup' Des matériels
-        activities = Activity.objects.order_by('startDate')
-        for activity in activities:
-            if activity.gear_id and activity.gear.raw_data == {}:
-                activity.sync_gear_details()
+    indicators = DurabilityIndicator.objects.annotate(
+        result_count=Count('results')
+    ).order_by('name')
+    return render(request, 'centcols/durability_indicators.html', {
+        'indicators': indicators,
+        'form': form,
+    })
 
 
-    return render(request, 'centcols/maintenance.html', locals())
+def durability_indicator_detail(request, id):
+    """Affiche les résultats d'un indicateur de durabilité pour toutes les activités."""
+    indicator = get_object_or_404(DurabilityIndicator, id=id)
+
+    SORT_FIELDS = {
+        'date':       'activity__startDate',
+        'name':       'activity__name',
+        'power':      'power_watts',
+        'start_time': 'start_time_seconds',
+    }
+    sort_key = request.GET.get('sort', 'date')
+    direction = request.GET.get('dir', 'desc')
+
+    if sort_key not in SORT_FIELDS:
+        sort_key = 'date'
+    if direction not in ('asc', 'desc'):
+        direction = 'desc'
+
+    order_field = SORT_FIELDS[sort_key]
+    if direction == 'desc':
+        order_field = '-' + order_field
+
+    results = (
+        DurabilityResult.objects
+        .filter(indicator=indicator)
+        .select_related('activity')
+        .order_by(order_field)
+    )
+    columns = [
+        ('date',       'Date'),
+        ('name',       'Activité'),
+        ('power',      'Puissance (W)'),
+        ('start_time', 'Début de la fenêtre'),
+    ]
+    return render(request, 'centcols/durability_indicator_detail.html', {
+        'indicator': indicator,
+        'results': results,
+        'sort_key': sort_key,
+        'direction': direction,
+        'opposite_dir': 'asc' if direction == 'desc' else 'desc',
+        'columns': columns,
+    })
+
+
+def delete_durability_indicator(request, id):
+    """Supprime un indicateur de durabilité (et ses résultats en cascade)."""
+    indicator = get_object_or_404(DurabilityIndicator, id=id)
+    if request.method == 'POST':
+        indicator.delete()
+        messages.success(request, f"Indicateur « {indicator.name} » supprimé.")
+    return redirect(reverse('list_durability_indicators'))
 
 
 def graph_test(request):

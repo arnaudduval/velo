@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load mathfilters %}
+{% load formatSeconds %}
+{% block title %}Durabilité — {{ indicator.name }}{% endblock %}
+{% block content %}
+
+<h2>{{ indicator.name }}</h2>
+<p>
+    Meilleure puissance sur <strong>{{ indicator.duration_seconds }} s</strong>
+    après avoir dépensé <strong>{{ indicator.energy_threshold_kj }} kJ</strong>
+    (mode : {{ indicator.get_energy_mode_display }}).
+</p>
+
+<p><a href="{% url 'list_durability_indicators' %}">&larr; Retour aux indicateurs</a></p>
+
+<table class="list_table">
+    <thead>
+        <tr>
+            {% for col_key, col_label in columns %}
+                {% if col_key == sort_key %}
+                    <th>
+                        <a href="?sort={{ col_key }}&dir={{ opposite_dir }}">
+                            {{ col_label }}
+                            {% if direction == 'asc' %}▲{% else %}▼{% endif %}
+                        </a>
+                    </th>
+                {% else %}
+                    <th><a href="?sort={{ col_key }}&dir=desc">{{ col_label }}</a></th>
+                {% endif %}
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for result in results %}
+        <tr>
+            <td>{{ result.activity.startDate|date:"d M Y" }}</td>
+            <td><a href="{% url 'activity_details' result.activity.id %}">{{ result.activity.name|truncatechars:50 }}</a></td>
+            <td align="right"><strong>{{ result.power_watts|floatformat:0 }}</strong></td>
+            <td align="right">{{ result.start_time_seconds|formatSeconds }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4">Aucun résultat. Lancez le calcul depuis la page <a href="{% url 'maintenance' %}">Maintenance</a>.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<style>
+    .list_table th a { text-decoration: none; color: inherit; white-space: nowrap; }
+    .list_table th a:hover { text-decoration: underline; }
+</style>
+
+{% endblock %}
