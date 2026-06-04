@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% load mathfilters %}
+{% load formatSeconds %}
+{% load static %}
+{% load leaflet_tags %}
+{% block title %}Indicateurs{% endblock %}
+{% block head %}
+    {% leaflet_js %}
+    {% leaflet_css %}
+{% endblock %}
+{% block content %}
+Nombre d'activités : {{ count }} <br>
+Distance totale : {{ distance|div:1000|floatformat:2 }} km<br>
+Temps total : {{ moving_time|formatSeconds }} <br>
+Temps total écoulé : {{ elapsed_time|formatSeconds }} <br>
+Eddington : {{ eddington }} <br>
+<h1>Indicateurs 2025</h1>
+<ul>
+    <li>Distance totale commute: {{ total_distance_commute|div:1000|floatformat:0 }} km</li>
+    <li>Distance totale sans HT: {{ total_distance_notrainer|div:1000|floatformat:0 }} km</li>
+    <li>Distance totale sans HT sans commute: {{ total_distance_notrainer_nocommute|div:1000|floatformat:0 }} km</li>
+    <li>D+ sans HT: {{ total_elevation_notrainer|floatformat:0 }} m</li>
+    <li>Temps total: {{ total_time  |formatSeconds }}</li>
+    <li>Temps total sans HT: {{ total_time_notrainer  |formatSeconds }}</li>
+    <li>Temps total sans commute: {{ total_time_nocommute  |formatSeconds }}</li>
+</ul>
+
+<img src="{% url 'graph_test' %}" />
+
+{% leaflet_map "main" callback="main_map_init" %}
+
+
+<script type="text/javascript">
+    function main_map_init (map, options) {
+        // Use Leaflet API here
+        /*var myLines = [{
+            "type": "LineString",
+            "coordinates": [[-100, 40], [-105, 45], [-110, 55]]
+            }, {
+            "type": "LineString",
+            "coordinates": [[-105, 40], [-110, 45], [-115, 55]]
+            }];
+
+        var myStyle = {
+            "color": "#ff7800",
+            "weight": 5,
+            "opacity": 0.65
+        };*/
+        var style = {
+            "color": "#ff0000",
+            "weight": 2,
+            "opacity": 1
+            };
+
+        /*L.geoJSON(myLines, {
+            style: myStyle
+            }).addTo(map);*/
+        var dataurl = "{% url 'all_sumtrack_json' %}";
+        $.getJSON(dataurl, function (data) {
+                var feature = L.geoJson(data, {style: style}).addTo(map);
+                map.fitBounds(feature.getBounds());
+                    });
+
+
+    }
+</script>
+
+{% endblock %}

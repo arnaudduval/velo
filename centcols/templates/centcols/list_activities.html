@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% load mathfilters %}
+{% load static %}
+{% load formatSeconds %}
+{% block title %}Liste des activités{% endblock %}
+{% block content %}
+
+<form method="get" class="mb-3">
+    <div class="form-group mr-2">
+        <label for="page_size">Activités par page</label>
+        <select name="page_size" id="page_size" onchange="this.form.submit()">
+            <option value="10" {% if page_size == 10 %}selected{% endif %}>10</option>
+            <option value="25" {% if page_size == 25 %}selected{% endif %}>25</option>
+            <option value="50" {% if page_size == 50 %}selected{% endif %}>50</option>
+            <option value="100" {% if page_size == 100 %}selected{% endif %}>100</option>
+            <option value="200" {% if page_size == 200 %}selected{% endif %}>200</option>
+        </select>
+    </div>
+</form>
+
+<form method="get" class="form-inline mb-3">
+    <div class="form-group mr-2">
+        <label for="type" class="mr-2">Type :</label>
+        <select name="type" id="type" class="form-control" onchange="this.form.submit()">
+            <option value="">Tous</option>
+            <option value="Ride" {% if activity_type == 'Ride' %}selected{% endif %}>Ride</option>
+            <option value="Run" {% if activity_type == 'Run' %}selected{% endif %}>Run</option>
+        </select>
+    </div>
+</form>
+
+<table class=list_table>
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Sport</th>
+            <th>T</th>
+            <th>Nom</th>
+            <th>Distance</th>
+            <th>Durée</th>
+            <th>Dénivelé</th>
+            <th>Matériel</th>
+            <th>Détails</th>
+            <th>Scan Cols</th>
+            <th>Streams</th>
+            <th>CP</th>
+            <th>tiles</th>
+            <th>Strava</th>
+            <th> </th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for activity in activities %}
+            <tr>
+                <td>{{ activity.startDate|date:"d M Y" }}</td>
+                <td>{{ activity.Type }}</td>
+                <td>{{ activity.sport_type }}</td>
+                <td>{% if activity.trainer %}O{% else %}N{% endif %}</td>
+                <td>{{ activity.name|truncatechars:50 }}</td>
+                <!-- div uniquement dispo dans django mathfilters-->
+                <td align=right>{{ activity.distance|div:1000|floatformat:2 }}</td>
+                <td align=right>{{ activity.moving_time|formatSeconds }}</td>
+                <td align=right>{{ activity.total_elevation_gain|floatformat:0 }}</td>
+                <td align=right>{{ activity.gear.name }}</td>
+                <td align=center>{% if activity.detailsHandled %}✔{% else %}✘{% endif %}</td>
+                <td align=center>{% if activity.colsHandled %}✔{% else %}✘{% endif %}</a></td>
+                <td align=center>{% if activity.streamsHandled %}✔{% else %}✘{% endif %}</a></td>
+                <td align=center>{% if activity.cp_curveHandled %}✔{% else %}✘{% endif %}</a></td>
+                <td align=center>{% if activity.tilesHandled %}✔{% else %}✘{% endif %}</a></td>
+                <td align=center><a href="https://www.strava.com/activities/{{ activity.stravaId }}" target="_blank"><img src={% static 'img/strava_16.png' %} class=logo></a></td>
+                <td><a href="{% url 'activity_details' activity.id %}">Détails</a></td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Pagination -->
+<style>
+    .pagination {
+        margin-top: 20px;
+        text-align: center;
+    }
+    .pagination a, .pagination span {
+        padding: 5px 10px;
+        margin: 0 5px;
+        text-decoration: none;
+        border: 1px solid #ddd;
+        color: #333;
+    }
+    .pagination .current {
+        background-color: #007bff;
+        color: white;
+        border-radius: 3px;
+    }
+</style>
+<div class="pagination">
+    <span class="step-links">
+        {% if activities.has_previous %}
+            <a href="?page=1&amp;page_size={{ page_size }}">&laquo; première</a>
+            <a href="?page={{ activities.previous_page_number }}&amp;page_size={{ page_size }}">précédente</a>
+        {% endif %}
+
+        <span class="current">
+            Page {{ activities.number }} sur {{ activities.paginator.num_pages }}
+        </span>
+
+        {% if activities.has_next %}
+            <a href="?page={{ activities.next_page_number }}&amp;page_size={{ page_size }}">suivante</a>
+            <a href="?page={{ activities.paginator.num_pages }}&amp;page_size={{ page_size }}">dernière &raquo;</a>
+        {% endif %}
+    </span>
+</div>
+{% endblock %}

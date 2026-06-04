@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Ma page d'accueil{% endblock %}
+{% block content %}
+    <h1>La calculatrice qui fait des additions</h1>
+    <p>{{ nb1 }} + {{ nb2 }} = <strong>{{ total }}</strong> <br />
+    Calcul directement dans le template : {{ nb1|add:nb2 }}
+    </p>
+    <img src="{% static 'centcols/Col_icone.jpg' %}" alt="Mon image" /><br />
+    <img src="{% static 'img/pp.jpg' %}" alt="Mon image 2" />
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if envoi %}
+{{ count }} activité{{ count|pluralize}} importée{{ count|pluralize}} avec succès<br>
+<ul>
+{% for activity in imported %}
+    <li>{{ activity.name }}</a></li>
+
+{% endfor %}
+</ul>
+{% endif %}
+<form action="{% url 'import_strava' %}" method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <input type="submit" value="Submit" />
+</form>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% load mathfilters %}
+{% load formatSeconds %}
+{% load static %}
+{% load leaflet_tags %}
+{% block title %}{{ activity.name }}{% endblock %}
+{% block head %}
+    {% leaflet_js %}
+    {% leaflet_css %}
+{% endblock %}
+{% block content %}
+<h1>{{ activity.name }}</h1>
+<div>
+<h2>Données</h2>
+<ul class="summ">
+    <li>{{ activity.startDate|date:"d M Y" }}</li>
+    <li>Distance : {{ activity.distance|div:1000|floatformat:2 }} km</li>
+    <li>Temps en mouvement : {{ activity.moving_time|formatSeconds }}</li>
+    <li>Temps écoulé : {{ activity.elapsed_time|formatSeconds }}</li>
+    <li>Tuiles visitées : {{ n_visited_tiles }}</li>
+    <li>Max D+ en 1h: {{ max_1h_climb|floatformat:0 }} m</li>
+</ul>
+
+</div>
+
+
+{% leaflet_map "main" callback="main_map_init" %}
+
+<script type="text/javascript">
+    function onEachFeature(feature, layer) {
+    // does this feature have a property named popupContent?
+    if (feature.properties && feature.properties.popupContent) {
+        layer.bindPopup(feature.properties.popupContent);
+        }
+    }
+
+    function main_map_init (map, options) {
+        var style = {
+            "color": "#ff0000",
+            "weight": 2,
+            "opacity": 1
+            };
+
+        /*L.geoJSON(myLines, {
+            style: myStyle
+            }).addTo(map);*/
+        var dataurl = "{% url 'track_json' activity.id %}";
+        $.getJSON(dataurl, function (data) {
+                var feature = L.geoJson(data, {style: style}).addTo(map);
+                map.fitBounds(feature.getBounds());
+                    });
+        dataurl = "{% url 'climbed_json' activity.id%}";
+        $.getJSON(dataurl, function (data) {
+                var feature = L.geoJson(data, {onEachFeature: onEachFeature}).addTo(map);
+                    });
+        var tilesurl = "{% url 'visited_tiles_json' activity.id%}";
+        $.getJSON(tilesurl, function (data) {
+                var feature = L.geoJson(data, {style: style}).addTo(map);
+                    });
+
+    }
+</script>
+
+<canvas id="timeChart" width="500" height="200"></canvas>
+<canvas id="cpChart" width="500" height="200"></canvas>
+
+
+<script>
+
+$.get('{% url 'time_streams_json' activity.id %}', function(data) {
+    var ctx = $("#timeChart").get(0).getContext('2d');
+    var myChart = new Chart(ctx, {type: 'line', data: data});
+});
+
+</script>
+<script>
+
+$.get('{% url 'cp_curve_json' activity.id %}', function(data) {
+    var ctx = $("#cpChart").get(0).getContext('2d');
+    var myChart = new Chart(ctx, {type: 'line',
+                                  data: data,
+                                  options:{responsive: true,
+                                           scales:
+                                                {xAxes:
+                                                    [{
+                                                    display: true,
+                                                    type: 'logarithmic'}]
+                                                }
+                                          }
+
+
+
+                                  });
+});
+
+</script>
+
+<!--<img src="{% url 'graph_time' activity.id %}">
+<img src="{% url 'graph_cp' activity.id %}">-->
+
+
+
+
+
+<h2>Cols franchis</h2>
+<table class=list_table>
+    <thead>
+        <tr>
+            <th></th>
+            <th>Nom</th>
+            <th>Altitude</th>
+            <th>OSM</th>
+            <th>Activités</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for col in cols %}
+            {% if col.elevation > 2000 %}
+            <tr class=special>
+            {% else %}
+            <tr>
+            {% endif %}
+                <td>{{ forloop.counter }}</td>
+                <td>{{ col.name }}</td>
+                <td align=right>{{ col.elevation|floatformat:0 }}</td>
+                <td><a href="https://www.openstreetmap.org/node/{{ col.osmId }}">{{ col.osmId }}</a></td>
+                <td><a href="{% url 'activities_climbed' col.id %}">Détails</a></td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Liste des cols{% endblock %}
+{% block content %}
+<ul>
+{% for col in cols %}
+    <li><a href="https://www.openstreetmap.org/node/{{ col.osmId }}">{{ col.name }} ({{ col.elevation }} m)</a></li>
+
+{% endfor %}
+</ul>
+{% endblock %}

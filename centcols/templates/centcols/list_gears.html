@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load mathfilters %}
+{% load static %}
+{% load formatSeconds %}
+{% block title %}Liste des matériels{% endblock %}
+{% block content %}
+<table class=list_table>
+    <thead>
+        <tr>
+            <th>Nom</th>
+            <th>Marque</th>
+            <th>Modèle</th>
+            <th>Distance (km)</th>
+            <th> </th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for gear in gears %}
+            <tr>
+                <td>{{ gear.name }}</td>
+                <td>{{ gear.brand_name }}</td>
+                <td>{{ gear.model_name }}</td>
+                <td>{{ gear.distance|div:1000|floatformat:0 }}</td>
+                <td><a href="{% url 'gear_details' gear.id %}">Détails</a></td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

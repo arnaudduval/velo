@@ -5,3 +5,5 @@ db.sqlite3
 centcols/migrations
 static/js/node_modules
 env.sh
+__pycache__/
+static/img/pp.jpg

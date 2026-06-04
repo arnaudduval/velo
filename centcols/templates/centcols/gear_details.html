@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load mathfilters %}
+{% load formatSeconds %}
+{% load static %}
+{% load leaflet_tags %}
+{% block title %}{{ gear.name }}{% endblock %}
+{% block head %}
+    {% leaflet_js %}
+    {% leaflet_css %}
+{% endblock %}
+{% block content %}
+<h1>{{ gear.name }}</h1>
+<div>
+<h2>Données</h2>
+<ul class="summ">
+    <li>{{ gear.name }}</li>
+    <li>{{ gear.brand_name }} {{ gear.model_name }}</li>
+    <li>Distance Strava: {{ gear.distance|div:1000|floatformat:0 }} km</li>
+    <li>Distance calculée : {{ distance|div:1000|floatformat:0 }} km</li>
+    <li>Temps calculé : {{ moving_time|formatSeconds }}</li>
+</ul>
+
+<h2>Carnet d'entretien</h2>
+
+<form action="{% url 'gear_details' gear.id %}" method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <input type="Submit" value="Ajouter" />
+</form>
+
+<table class=list_table>
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Kilométrage</th>
+            <th>Heures</th>
+            <th>Description</th>
+            <th>Notes</th>
+            <th>Prochain entretien</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for service in services %}
+            <tr>
+                <td>{{ service.date|date:"d M Y" }}</td>
+                <td>{{ service.gear_distance|div:1000|floatformat:0 }}</td>
+                <td>{{ service.gear_time|formatSecondsToHours }}</td>
+                <td>{{ service.description }}</td>
+                <td>{{ service.notes }}</td>
+                <td>{{ service.get_periodicity_display }}</td>
+                <td>
+                    <a href="{% url 'sync_maintenance' maint_id=service.id %}" class="btn btn-sm btn-primary">Sync</a>
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+
+</div>
+
+
+
+{% endblock %}

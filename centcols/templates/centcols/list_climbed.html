@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% load mathfilters %}
+{% load static %}
+{% load leaflet_tags %}
+{% block title %}Liste des cols franchis{% endblock %}
+{% block head %}
+    {% leaflet_js %}
+    {% leaflet_css %}
+{% endblock %}
+{% block content %}
+<table class=list_table>
+    <thead>
+        <tr>
+            <th></th>
+            <th>Nom</th>
+            <th>Altitude</th>
+            <th>OSM</th>
+            <th>Activités</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for col in cols %}
+            {% if col.elevation > 2000 %}
+            <tr class=special>
+            {% else %}
+            <tr>
+            {% endif %}
+                <td>{{ forloop.counter }}</td>
+                <td>{{ col.name }}</td>
+                <td align=right>{{ col.elevation|floatformat:0 }}</td>
+                <td><a href="https://www.openstreetmap.org/node/{{ col.osmId }}">{{ col.osmId }}</a></td>
+                <td><a href="{% url 'activities_climbed' col.id %}">Détails</a></td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% leaflet_map "main" callback="main_map_init" %}
+
+<script type="text/javascript">
+    function onEachFeature(feature, layer) {
+    // does this feature have a property named popupContent?
+    if (feature.properties && feature.properties.popupContent) {
+        layer.bindPopup(feature.properties.popupContent);
+        }
+    }
+
+    function main_map_init (map, options) {
+        var dataurl = "{% url 'all_climbed_json' %}";
+        $.getJSON(dataurl, function (data) {
+                var feature = L.geoJson(data, {onEachFeature: onEachFeature}).addTo(map);
+                map.fitBounds(feature.getBounds());
+                    });
+    }
+</script>
+{% endblock %}
+

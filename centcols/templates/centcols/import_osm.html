@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if envoi %}
+{{ count }} col{{ count|pluralize}} importé{{ count|pluralize}} avec succès<br>
+<ul>
+{% for col in imported %}
+    <li><a href="https://www.openstreetmap.org/node/{{ col.osmId }}">{{ col.name }} ({{ col.elevation }} m)</a></li>
+
+{% endfor %}
+</ul>
+{% endif %}
+<form action="{% url 'import_osm' %}" method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <input type="submit" value="Submit" />
+</form>
+{% endblock %}

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+
+    <title>{% block title %}Ma page 100 cols{% endblock %}</title>
+
+    <link rel="stylesheet" href="{% static 'css/style.css' %}" />
+    <link rel="icon" type="image/png" href="{% static 'img/favicon.ico' %}">
+    <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    <script src="{% static 'js/node_modules/chart.js/dist/Chart.js' %}"></script>
+    <script>
+        $(function() {
+        $( ".datepicker" ).datepicker({
+        changeMonth: true,
+        changeYear: true,
+         dateFormat: 'dd/mm/yy'
+        });
+        });
+    </script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+<header>Cent cols</header>
+    <nav>
+       {% block nav %}
+       <ul>
+            <li><a href="/centcols/">Accueil &ensp;</a>
+            </li>
+            <li class="deroulant"><a href="#">100 cols &ensp;</a>
+                <ul class="sous">
+                    <li><a href="{% url 'list_activities' %}">Liste des activités</a></li>
+                    <li><a href="{% url 'list_climbed' %}">Liste des cols franchis</a></li>
+                    <li><a href="{% url 'list_gears' %}">Liste des matériels</a></li>
+                    <li><a href="{% url 'indicators' %}">Indicateurs</a></li>
+                    <li><a href="{% url 'import_strava' %}">MAJ Strava</a></li>
+                    <li><a href="{% url 'import_osm' %}">MAJ OSM</a></li>
+                    <li><a href="{% url 'maintenance' 0 %}">Maintenance</a></li>
+                </ul>
+            </li>
+            <li class="deroulant"><a href="#">Truc &ensp;</a>
+                <ul class="sous">
+                    <li><a href="#">Machin</a></li>
+                    <li><a href="#">Chose</a></li>
+                </ul>
+            </li>
+       </ul>
+       {% endblock %}
+   </nav>
+   <section id="content">
+       {% block content %}{% endblock %}
+   </section>
+    <footer>&copy; 100 cols</footer>
+
+
+</body>
+</html>
