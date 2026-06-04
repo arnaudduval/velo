@@ -588,9 +588,8 @@ def maintenance(request, action):
         after = time.mktime(ts.timetuple())
 
         #TODO coder une action à part
-        # TODO Utiliser le service
-        strava = StravaApp(50726, "d625a61ffceed1f105d45b67ce9e52ac2b8d26fc")
-        access_token = strava.get_token("d28249ce6bef2a5745e599902c268b66013a6270")
+        from services.strava_service import StravaService
+        service = StravaService()
 
         page = 0
         per_page = 200
@@ -601,18 +600,13 @@ def maintenance(request, action):
             page = page + 1
             if page > max_page:
                 break
-            activities = strava.get_activities(access_token, per_page=per_page, page=page,
-                                               before=before['startDate__max'].timestamp(),
-                                               after=after)
-                                               #after=after['startDate__min'].timestamp())
+            activities = service.get_activities(page=page, per_page=per_page,
+                                                before=before['startDate__max'].timestamp(),
+                                                after=after)
             if len(activities) == 0:
                 print('no activity returned')
                 break
             print(len(activities), "activities returned from Strava")
-
-            if 'message' in activities:
-                print(activities['message'])
-                break
 
             #TODO Faire une méthode à part dans la classe Activity
             for activity_data in activities:
