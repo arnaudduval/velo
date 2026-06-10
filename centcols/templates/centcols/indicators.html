@@ -25,7 +25,17 @@ Eddington : {{ eddington }} <br>
     <li>Temps total sans commute: {{ total_time_nocommute  |formatSeconds }}</li>
 </ul>
 
-<img src="{% url 'graph_test' %}" />
+<div id="pieChart" style="width:500px;height:400px;"></div>
+<script>
+$.get('{% url 'graph_test_json' %}', function(data) {
+    Plotly.newPlot('pieChart', [{
+        type: 'pie',
+        labels: data.labels,
+        values: data.values,
+        textinfo: 'label+percent',
+    }], {margin: {t: 20}}, {responsive: true});
+});
+</script>
 
 {% leaflet_map "main" callback="main_map_init" %}
 

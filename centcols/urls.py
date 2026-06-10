@@ -1,4 +1,4 @@
-from django.urls import path, re_path
+from django.urls import path
 from . import views
 
 urlpatterns = [
@@ -21,6 +21,7 @@ urlpatterns = [
     path('sync_maintenance/<int:maint_id>/', views.sync_maintenance_view, name='sync_maintenance'),
     path('graph_time/<int:id>/', views.graph_time, name="graph_time"),
     path('graph_test/', views.graph_test, name="graph_test"),
+    path('graph_test_json/', views.graph_test_json, name="graph_test_json"),
     path('graph_cp/<int:id>/', views.graph_cp, name="graph_cp"),
     path('sumtrack_json/<int:id>/', views.sumtrack_json, name="sumtrack_json"),
     path('track_json/<int:id>/', views.track_json, name="track_json"),

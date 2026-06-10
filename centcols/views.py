@@ -34,6 +34,22 @@ from django.db.models.functions import TruncDay, TruncMonth
 logger = logging.getLogger(__name__)
 
 
+def _fmt_duration(s):
+    """Format a duration in seconds as a human-readable string."""
+    s = int(s)
+    if s < 60:
+        return f"{s}s"
+    if s < 3600:
+        return f"{s // 60}:{s % 60:02d}"
+    return f"{s // 3600}:{(s % 3600) // 60:02d}"
+
+
+def _seconds_to_isodate(s):
+    """Convert a duration in seconds to an ISO datetime string (base: 1970-01-01)."""
+    s = int(s)
+    return f"1970-01-01T{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
+
+
 def cp_best_json(request, startday, startmonth, startyear, endday, endmonth, endyear):
     """
     Retourne la courbe CP entre la date de début et la date de fin
@@ -99,7 +115,6 @@ def cp_curve_json(request, id):
     except Exception as e:
         raise Http404(f"Error when deserializing CP curve: {e}")
 
-    # Logarithmically-spaced key durations (seconds) with human-readable labels
     KEY_DURATIONS = [
         (1,     '1s'),  (2,    '2s'),  (3,    '3s'),  (5,    '5s'),
         (8,     '8s'),  (10,  '10s'),  (15,  '15s'),  (20,  '20s'),
@@ -110,26 +125,27 @@ def cp_curve_json(request, id):
         (7200,  '2h'),  (10800,'3h'), (18000,  '5h'),
     ]
 
-    data = {
-        'labels': [],
-        'datasets': [{
-            'label': 'Critical Power (Watts)',
-            'data': [],
-            'fill': True,
-            'borderColor': '#cc1e1e',
-            'backgroundColor': '#e49191',
-            'pointRadius': 3,
-            'tension': 0.4,
-        }]
-    }
+    tick_points = [(d, l) for d, l in KEY_DURATIONS if d <= len(cp_curve)]
 
-    for duration, label in KEY_DURATIONS:
-        if duration <= len(cp_curve):
-            data['labels'].append(label)
-            data['datasets'][0]['data'].append({
-                'x': float(duration),
-                'y': float(cp_curve[duration - 1]),
-            })
+    all_x = list(range(1, len(cp_curve) + 1))
+    all_y = [float(v) for v in cp_curve]
+
+    data = {
+        'trace': {
+            'x': all_x,
+            'y': all_y,
+            'text': [_fmt_duration(s) for s in all_x],
+            'hovertemplate': 'Durée : %{text}<br>Puissance : %{y:.0f} W<extra></extra>',
+            'name': 'Puissance critique (W)',
+            'type': 'scatter',
+            'mode': 'lines',
+            'fill': 'tozeroy',
+            'line': {'color': '#cc1e1e', 'width': 2},
+            'fillcolor': 'rgba(228, 145, 145, 0.4)',
+        },
+        'tickvals': [d for d, _ in tick_points],
+        'ticktext': [l for _, l in tick_points],
+    }
 
     return HttpResponse(json.dumps(data), content_type="application/json")
 
@@ -161,39 +177,43 @@ def cp_curve_json(request, id):
 
 
 def time_streams_json(request, id):
-    """Return Test data for a chart"""
-    streams = Stream.objects.filter(activity__id = id)
+    """Return activity streams as Plotly traces (power on y1, altitude on y2)."""
+    streams = Stream.objects.filter(activity__id=id)
     if streams.count() == 0:
         raise Http404
 
+    time_data = pickle.loads(base64.b64decode(streams.get(metric='time').data)).tolist()
+    # Convert seconds to ISO datetimes so Plotly formats the hover header as HH:MM:SS
+    time_iso = [_seconds_to_isodate(s) for s in time_data]
+    traces = []
 
+    if streams.filter(metric='watts').exists():
+        traces.append({
+            'x': time_iso,
+            'y': pickle.loads(base64.b64decode(streams.get(metric='watts').data)).tolist(),
+            'hovertemplate': 'Puissance : %{y:.0f} W<extra></extra>',
+            'name': 'Puissance (W)',
+            'type': 'scatter',
+            'mode': 'lines',
+            'line': {'color': '#cc1e1e', 'width': 1},
+            'yaxis': 'y1',
+        })
 
-    data = {}
-    data['labels'] = pickle.loads(base64.b64decode(streams.get(metric='time').data)).tolist()
-    data['datasets'] = []
-    for stream in streams:
-        if stream.metric == 'watts':
-            metric = {}
-            metric['label'] = 'Puissance'
-            metric['data'] = pickle.loads(base64.b64decode(streams.get(metric='watts').data)).tolist()
-            metric['fill'] = False
-            metric['borderColor'] = '#cc1e1e'
-            metric['borderWidth'] = '1'
-            metric['pointRadius'] = 0
-            data['datasets'].append(metric)
-        if stream.metric == 'altitude':
-            metric = {}
-            metric['label'] = 'Altitude'
-            metric['data'] = pickle.loads(base64.b64decode(streams.get(metric='altitude').data)).tolist()
-            metric['fill'] = True
-            metric['borderColor'] = '#d8be47'
-            metric['backgroundColor'] = '#eed560'
-            metric['pointRadius'] = 0
-            data['datasets'].append(metric)
+    if streams.filter(metric='altitude').exists():
+        traces.append({
+            'x': time_iso,
+            'y': pickle.loads(base64.b64decode(streams.get(metric='altitude').data)).tolist(),
+            'hovertemplate': 'Altitude : %{y:.0f} m<extra></extra>',
+            'name': 'Altitude (m)',
+            'type': 'scatter',
+            'mode': 'lines',
+            'fill': 'tozeroy',
+            'line': {'color': '#d8be47'},
+            'fillcolor': 'rgba(238, 213, 96, 0.4)',
+            'yaxis': 'y2',
+        })
 
-
-    return HttpResponse(json.dumps(data), content_type="application/json")
-
+    return HttpResponse(json.dumps({'traces': traces}), content_type="application/json")
 
 
 
@@ -610,8 +630,22 @@ def delete_durability_indicator(request, id):
     return redirect(reverse('list_durability_indicators'))
 
 
+def graph_test_json(request):
+    """Return activity type distribution as Plotly pie trace."""
+    rows = Activity.objects.order_by('Type').values('Type').distinct()
+    labels = []
+    values = []
+    for row in rows:
+        t = row['Type']
+        if t:
+            labels.append(t)
+            values.append(Activity.objects.filter(Type=t).count())
+    data = {'labels': labels, 'values': values}
+    return HttpResponse(json.dumps(data), content_type="application/json")
+
+
 def graph_test(request):
-    """Test generation of an image"""
+    """Test generation of an image (legacy matplotlib view, kept for reference)."""
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     import numpy as np
     import matplotlib

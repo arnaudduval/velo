@@ -61,53 +61,45 @@
     }
 </script>
 
-<canvas id="timeChart" width="500" height="200"></canvas>
-<canvas id="cpChart" width="500" height="200"></canvas>
-
+<div id="timeChart" style="width:100%;height:250px;"></div>
+<div id="cpChart" style="width:100%;height:250px;"></div>
 
 <script>
+var spikeConfig = {
+    showspikes: true,
+    spikemode: 'across',
+    spikesnap: 'cursor',
+    spikecolor: '#666',
+    spikethickness: 1,
+    spikedash: 'dot',
+};
 
 $.get('{% url 'time_streams_json' activity.id %}', function(data) {
-    var ctx = $("#timeChart").get(0).getContext('2d');
-    var myChart = new Chart(ctx, {type: 'line', data: data});
+    var layout = {
+        hovermode: 'x unified',
+        margin: {t: 20, r: 60},
+        legend: {orientation: 'h', y: -0.15},
+        xaxis: Object.assign({
+            type: 'date',
+            tickformat: '%H:%M',
+            hoverformat: '%H:%M:%S',
+        }, spikeConfig),
+        yaxis:  {title: 'Puissance (W)', titlefont: {color: '#cc1e1e'}, tickfont: {color: '#cc1e1e'}},
+        yaxis2: {title: 'Altitude (m)', titlefont: {color: '#b89a00'}, tickfont: {color: '#b89a00'},
+                 overlaying: 'y', side: 'right'},
+    };
+    Plotly.newPlot('timeChart', data.traces, layout, {responsive: true});
 });
-
-</script>
-<script>
 
 $.get('{% url 'cp_curve_json' activity.id %}', function(data) {
-    var ctx = $("#cpChart").get(0).getContext('2d');
-    var tickLabels = {
-        1:'1s', 2:'2s', 3:'3s', 5:'5s', 8:'8s', 10:'10s', 15:'15s', 20:'20s',
-        30:'30s', 45:'45s', 60:'1m', 90:'1m30', 120:'2m', 180:'3m', 240:'4m',
-        300:'5m', 420:'7m', 600:'10m', 900:'15m', 1200:'20m', 1800:'30m',
-        2700:'45m', 3600:'1h', 5400:'1h30', 7200:'2h', 10800:'3h', 18000:'5h'
+    var layout = {
+        hovermode: 'closest',
+        margin: {t: 20},
+        xaxis: Object.assign({type: 'log', tickvals: data.tickvals, ticktext: data.ticktext, title: 'Durée'}, spikeConfig),
+        yaxis: {title: 'Puissance (W)'},
     };
-    var tickPositions = Object.keys(tickLabels).map(Number);
-    new Chart(ctx, {
-        type: 'line',
-        data: data,
-        options: {
-            responsive: true,
-            scales: {
-                xAxes: [{
-                    type: 'logarithmic',
-                    afterBuildTicks: function(scale) {
-                        scale.ticks = tickPositions.filter(function(t) {
-                            return t >= scale.min && t <= scale.max;
-                        });
-                    },
-                    ticks: {
-                        callback: function(value) {
-                            return tickLabels[value] || '';
-                        }
-                    }
-                }]
-            }
-        }
-    });
+    Plotly.newPlot('cpChart', [data.trace], layout, {responsive: true});
 });
-
 </script>
 
 <!--<img src="{% url 'graph_time' activity.id %}">
