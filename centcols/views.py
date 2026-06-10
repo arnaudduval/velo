@@ -177,43 +177,45 @@ def cp_curve_json(request, id):
 
 
 def time_streams_json(request, id):
-    """Return activity streams as Plotly traces (power on y1, altitude on y2)."""
+    """Return all available activity streams plus time/distance x-axis data."""
     streams = Stream.objects.filter(activity__id=id)
-    if streams.count() == 0:
+    if not streams.exists():
         raise Http404
 
-    time_data = pickle.loads(base64.b64decode(streams.get(metric='time').data)).tolist()
-    # Convert seconds to ISO datetimes so Plotly formats the hover header as HH:MM:SS
+    def _load(metric):
+        return pickle.loads(base64.b64decode(streams.get(metric=metric).data)).tolist()
+
+    time_data = _load('time')
     time_iso = [_seconds_to_isodate(s) for s in time_data]
-    traces = []
 
-    if streams.filter(metric='watts').exists():
-        traces.append({
-            'x': time_iso,
-            'y': pickle.loads(base64.b64decode(streams.get(metric='watts').data)).tolist(),
-            'hovertemplate': 'Puissance : %{y:.0f} W<extra></extra>',
-            'name': 'Puissance (W)',
-            'type': 'scatter',
-            'mode': 'lines',
-            'line': {'color': '#cc1e1e', 'width': 1},
-            'yaxis': 'y1',
-        })
+    distance_km = None
+    if streams.filter(metric='distance').exists():
+        distance_km = [round(v / 1000, 3) for v in _load('distance')]
 
-    if streams.filter(metric='altitude').exists():
-        traces.append({
-            'x': time_iso,
-            'y': pickle.loads(base64.b64decode(streams.get(metric='altitude').data)).tolist(),
-            'hovertemplate': 'Altitude : %{y:.0f} m<extra></extra>',
-            'name': 'Altitude (m)',
-            'type': 'scatter',
-            'mode': 'lines',
-            'fill': 'tozeroy',
-            'line': {'color': '#d8be47'},
-            'fillcolor': 'rgba(238, 213, 96, 0.4)',
-            'yaxis': 'y2',
-        })
+    # Each entry: (strava_stream_name, key, label, unit, transform)
+    STREAM_DEFS = [
+        ('watts',           'watts',    'Puissance', 'W',    None),
+        ('altitude',        'altitude', 'Altitude',  'm',    None),
+        ('heartrate',       'heartrate','FC',         'bpm',  None),
+        ('velocity_smooth', 'velocity', 'Vitesse',   'km/h', lambda v: round(v * 3.6, 2)),
+        ('cadence',         'cadence',  'Cadence',   'rpm',  None),
+    ]
 
-    return HttpResponse(json.dumps({'traces': traces}), content_type="application/json")
+    metrics = {}
+    for stream_name, key, label, unit, transform in STREAM_DEFS:
+        if streams.filter(metric=stream_name).exists():
+            raw = _load(stream_name)
+            metrics[key] = {
+                'label': label,
+                'unit': unit,
+                'y': [transform(v) for v in raw] if transform else raw,
+            }
+
+    return HttpResponse(json.dumps({
+        'time': time_iso,
+        'distance': distance_km,
+        'metrics': metrics,
+    }), content_type="application/json")
 
 
 

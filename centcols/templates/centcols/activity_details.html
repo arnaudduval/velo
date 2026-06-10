@@ -61,44 +61,137 @@
     }
 </script>
 
-<div id="timeChart" style="width:100%;height:250px;"></div>
+<style>
+.stream-controls { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:6px; }
+.toggle-wrap { display:flex; align-items:center; gap:6px; font-size:1.2em; }
+.toggle-switch { position:relative; display:inline-block; width:38px; height:22px; }
+.toggle-switch input { opacity:0; width:0; height:0; }
+.toggle-slider { position:absolute; cursor:pointer; inset:0; background:#ccc; border-radius:22px; transition:.25s; }
+.toggle-slider::before { content:''; position:absolute; height:16px; width:16px; left:3px; bottom:3px; background:white; border-radius:50%; transition:.25s; }
+.toggle-switch input:checked + .toggle-slider { background:#3070cc; }
+.toggle-switch input:checked + .toggle-slider::before { transform:translateX(16px); }
+.metric-check { display:flex; align-items:center; gap:4px; cursor:pointer; user-select:none; }
+.metric-check input { cursor:pointer; }
+</style>
+
+<div class="stream-controls" id="streamControls">
+    <div class="toggle-wrap" id="xAxisToggleWrap" style="display:none">
+        <span title="Temps">⏱</span>
+        <label class="toggle-switch">
+            <input type="checkbox" id="xAxisToggle" onchange="buildStreamChart()">
+            <span class="toggle-slider"></span>
+        </label>
+        <span title="Distance">📏</span>
+    </div>
+    <div id="metricCheckboxes" style="display:flex; gap:12px; flex-wrap:wrap;"></div>
+</div>
+
+<div id="timeChart" style="width:100%;height:280px;"></div>
 <div id="cpChart" style="width:100%;height:250px;"></div>
 
 <script>
 var spikeConfig = {
-    showspikes: true,
-    spikemode: 'across',
-    spikesnap: 'cursor',
-    spikecolor: '#666',
-    spikethickness: 1,
-    spikedash: 'dot',
+    showspikes: true, spikemode: 'across', spikesnap: 'cursor',
+    spikecolor: '#666', spikethickness: 1, spikedash: 'dot',
 };
 
-$.get('{% url 'time_streams_json' activity.id %}', function(data) {
+// Fixed display config per metric key
+var METRICS_CFG = {
+    watts:    {label:'Puissance', unit:'W',    color:'#cc1e1e', yaxis:'y',  fmt:'.0f', on:true},
+    altitude: {label:'Altitude',  unit:'m',    color:'#b89a00', yaxis:'y2', fmt:'.0f', on:true,
+               fill:'tozeroy', fillcolor:'rgba(238,213,96,0.35)'},
+    heartrate:{label:'FC',        unit:'bpm',  color:'#e07030', yaxis:'y3', fmt:'.0f', on:true},
+    velocity: {label:'Vitesse',   unit:'km/h', color:'#3070cc', yaxis:'y4', fmt:'.1f', on:false},
+    cadence:  {label:'Cadence',   unit:'rpm',  color:'#30a030', yaxis:'y5', fmt:'.0f', on:false},
+};
+
+var streamData = null;
+
+function buildStreamChart() {
+    if (!streamData) return;
+    var useDistance = document.getElementById('xAxisToggle').checked;
+    var xData = useDistance ? streamData.distance : streamData.time;
+
+    var traces = [];
     var layout = {
         hovermode: 'x unified',
-        margin: {t: 20, r: 60},
-        legend: {orientation: 'h', y: -0.15},
-        xaxis: Object.assign({
-            type: 'date',
-            tickformat: '%H:%M',
-            hoverformat: '%H:%M:%S',
-        }, spikeConfig),
-        yaxis:  {title: 'Puissance (W)', titlefont: {color: '#cc1e1e'}, tickfont: {color: '#cc1e1e'}},
-        yaxis2: {title: 'Altitude (m)', titlefont: {color: '#b89a00'}, tickfont: {color: '#b89a00'},
-                 overlaying: 'y', side: 'right'},
+        margin: {t:20, r:60},
+        legend: {orientation:'h', y:-0.2},
+        xaxis: Object.assign(
+            useDistance
+                ? {title:'Distance (km)', hoverformat:'.2f'}
+                : {type:'date', tickformat:'%H:%M', hoverformat:'%H:%M:%S'},
+            spikeConfig
+        ),
     };
-    Plotly.newPlot('timeChart', data.traces, layout, {responsive: true});
+
+    Object.keys(METRICS_CFG).forEach(function(key) {
+        var cfg = METRICS_CFG[key];
+        var metric = streamData.metrics[key];
+        var cb = document.querySelector('[data-metric="' + key + '"]');
+        var visible = !!(metric && cb && cb.checked);
+
+        // Build layout axis key: 'y' → 'yaxis', 'y2' → 'yaxis2', etc.
+        var axKey = cfg.yaxis === 'y' ? 'yaxis' : 'yaxis' + cfg.yaxis.slice(1);
+        layout[axKey] = {
+            visible: visible,
+            automargin: true,
+            titlefont: {color: cfg.color},
+            tickfont:  {color: cfg.color},
+        };
+        if (cfg.yaxis !== 'y') {
+            Object.assign(layout[axKey], {overlaying:'y', side:'right', autoshift:true});
+        }
+
+        if (visible) {
+            var trace = {
+                x: xData, y: metric.y,
+                name: cfg.label + ' (' + cfg.unit + ')',
+                hovertemplate: cfg.label + ' : %{y:' + cfg.fmt + '} ' + cfg.unit + '<extra></extra>',
+                type: 'scatter', mode: 'lines',
+                line: {color: cfg.color, width: 1},
+                yaxis: cfg.yaxis,
+            };
+            if (cfg.fill) { trace.fill = cfg.fill; trace.fillcolor = cfg.fillcolor; }
+            traces.push(trace);
+        }
+    });
+
+    Plotly.react('timeChart', traces, layout, {responsive: true});
+}
+
+$.get('{% url 'time_streams_json' activity.id %}', function(data) {
+    streamData = data;
+
+    // Show distance toggle only if distance stream exists
+    if (data.distance) {
+        document.getElementById('xAxisToggleWrap').style.display = 'flex';
+    }
+
+    // Build metric checkboxes for available metrics only
+    var container = document.getElementById('metricCheckboxes');
+    Object.keys(METRICS_CFG).forEach(function(key) {
+        if (!data.metrics[key]) return;
+        var cfg = METRICS_CFG[key];
+        var label = document.createElement('label');
+        label.className = 'metric-check';
+        label.innerHTML =
+            '<input type="checkbox"' + (cfg.on ? ' checked' : '') +
+            ' data-metric="' + key + '" onchange="buildStreamChart()">' +
+            '<span style="color:' + cfg.color + '">■</span> ' + cfg.label;
+        container.appendChild(label);
+    });
+
+    buildStreamChart();
 });
 
 $.get('{% url 'cp_curve_json' activity.id %}', function(data) {
-    var layout = {
+    Plotly.newPlot('cpChart', [data.trace], {
         hovermode: 'closest',
-        margin: {t: 20},
-        xaxis: Object.assign({type: 'log', tickvals: data.tickvals, ticktext: data.ticktext, title: 'Durée'}, spikeConfig),
-        yaxis: {title: 'Puissance (W)'},
-    };
-    Plotly.newPlot('cpChart', [data.trace], layout, {responsive: true});
+        margin: {t:20},
+        xaxis: Object.assign({type:'log', tickvals:data.tickvals, ticktext:data.ticktext, title:'Durée'}, spikeConfig),
+        yaxis: {title:'Puissance (W)'},
+    }, {responsive: true});
 });
 </script>
 
