@@ -99,26 +99,37 @@ def cp_curve_json(request, id):
     except Exception as e:
         raise Http404(f"Error when deserializing CP curve: {e}")
 
-    # Create data for JSON
+    # Logarithmically-spaced key durations (seconds) with human-readable labels
+    KEY_DURATIONS = [
+        (1,     '1s'),  (2,    '2s'),  (3,    '3s'),  (5,    '5s'),
+        (8,     '8s'),  (10,  '10s'),  (15,  '15s'),  (20,  '20s'),
+        (30,   '30s'),  (45,  '45s'),  (60,   '1m'),  (90, '1m30'),
+        (120,   '2m'),  (180,  '3m'),  (240,  '4m'),  (300,  '5m'),
+        (420,   '7m'),  (600, '10m'),  (900, '15m'),  (1200, '20m'),
+        (1800, '30m'),  (2700,'45m'),  (3600,  '1h'),  (5400,'1h30'),
+        (7200,  '2h'),  (10800,'3h'), (18000,  '5h'),
+    ]
+
     data = {
-        'labels': [],   # Optional, can be use to add labels on X axis
+        'labels': [],
         'datasets': [{
             'label': 'Critical Power (Watts)',
             'data': [],
             'fill': True,
             'borderColor': '#cc1e1e',
             'backgroundColor': '#e49191',
-            'pointRadius': 2,
-            'tension': 0.4  # Optionnal, smooth the curve
+            'pointRadius': 3,
+            'tension': 0.4,
         }]
     }
 
-    # Fill data
-    for i in range(len(cp_curve)):
-        data['datasets'][0]['data'].append({
-            'x': float(i + 1),  # Duration in seconds
-            'y': float(cp_curve[i]) # Critical power in watts
-        })
+    for duration, label in KEY_DURATIONS:
+        if duration <= len(cp_curve):
+            data['labels'].append(label)
+            data['datasets'][0]['data'].append({
+                'x': float(duration),
+                'y': float(cp_curve[duration - 1]),
+            })
 
     return HttpResponse(json.dumps(data), content_type="application/json")
 
