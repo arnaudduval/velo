@@ -1,7 +1,7 @@
 from collections import OrderedDict
 from datetime import datetime
 
-from django.db.models import Q, Max, Sum
+from django.db.models import Q, Max, Min, Sum
 from django.utils import timezone
 
 from .activity import Activity
@@ -171,44 +171,73 @@ def action_sync_gear():
 
 def action_update_modified():
     """Fetch recent activities from Strava and update any that have changed."""
-    result = Activity.objects.aggregate(Max('startDate'))
-    if not result['startDate__max']:
+    dates = Activity.objects.aggregate(Min('startDate'), Max('startDate'))
+    if not dates['startDate__min']:
         return "Aucune activité en base."
 
-    import ciso8601
-    after = time.mktime(ciso8601.parse_datetime("20200101").timetuple())
+    after = dates['startDate__min'].timestamp()
+    before = timezone.now().timestamp()
 
     service = StravaService()
     page = 0
     modified_count = 0
+    created_count = 0
+    rate_limited = False
 
-    while True:
+    while not rate_limited:
         page += 1
         if page > 1000:
             break
-        activities = service.get_activities(
-            page=page, per_page=200,
-            before=result['startDate__max'].timestamp(),
-            after=after,
-        )
+
+        try:
+            activities = service.get_activities(
+                page=page, per_page=200, before=before, after=after,
+            )
+        except StravaRateLimitExceeded:
+            logger.error("Strava rate limit exceeded, stopping.")
+            break
+        except Exception as e:
+            logger.error("Error while fetching activities: %s", e)
+            break
+
         if not activities:
             break
 
-        modified_ids = []
+        to_update = []
         for activity_data in activities:
             q = Activity.objects.filter(stravaId=activity_data['id'])
-            if q.exists() and q[0].check_modified(activity_data):
-                modified_ids.append(activity_data['id'])
-            elif not q.exists():
-                logger.warning("Activity %s not found in DB", activity_data['id'])
-
-        for strava_id in modified_ids:
-            q = Activity.objects.filter(stravaId=strava_id)
             if q.exists():
-                q[0].update()
-                modified_count += 1
+                changed = q[0].check_modified(activity_data)
+                if changed:
+                    to_update.append((q[0], changed))
+            else:
+                logger.info("New activity %s found, creating.", activity_data['id'])
+                activity, _ = Activity.objects.get_or_create(stravaId=activity_data['id'])
+                activity._update_fields(activity_data)
+                created_count += 1
 
-    return f"{modified_count} activité(s) mise(s) à jour."
+        for activity, changed_fields in to_update:
+            if 'summary_polyline' in changed_fields:
+                activity.detailsHandled = False
+                activity.colsHandled = False
+                activity.tilesHandled = False
+                activity.save()
+            try:
+                activity.update()
+                modified_count += 1
+            except StravaRateLimitExceeded:
+                logger.error("Strava rate limit exceeded during update, stopping.")
+                rate_limited = True
+                break
+            except Exception as e:
+                logger.error("Error updating activity %s: %s", activity.stravaId, e)
+
+    parts = []
+    if modified_count:
+        parts.append(f"{modified_count} activité(s) mise(s) à jour")
+    if created_count:
+        parts.append(f"{created_count} activité(s) créée(s)")
+    return ", ".join(parts) + "." if parts else "Aucune modification détectée."
 
 
 def action_compute_durability():

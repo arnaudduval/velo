@@ -379,8 +379,8 @@ class Activity(models.Model):
         self.do_check_passes()
         return True
 
-    def check_modified(self, activity_data):
-        """Check if activity is different from the one passed as argument"""
+    def check_modified(self, activity_data) -> set:
+        """Check if activity differs from Strava data. Returns set of changed field names."""
         fields_to_check = [
             ('name', 'name'),
             ('distance', 'distance'),
@@ -395,7 +395,7 @@ class Activity(models.Model):
             ('trainer', 'trainer'),
             ('manual', 'manual'),
         ]
-        modified = False
+        changed = set()
         for field, activity_key, *args in fields_to_check:
             if isinstance(activity_key, tuple):
                 if activity_key[0] in activity_data and activity_key[1] in activity_data[activity_key[0]]:
@@ -403,7 +403,7 @@ class Activity(models.Model):
                     new_value = activity_data[activity_key[0]][activity_key[1]]
                     if isinstance(new_value, str) and new_value != current_value:
                         logger.info("modif : %s", field)
-                        modified = True
+                        changed.add(field)
             else:
                 if activity_key in activity_data:
                     current_value = getattr(self, field)
@@ -412,22 +412,20 @@ class Activity(models.Model):
                         new_value = args[0](new_value)
                     if new_value != current_value:
                         logger.info("modif : %s", field)
-                        modified = True
+                        changed.add(field)
 
         # Specific handling for gear_id
         if 'gear_id' in activity_data:
             if self.gear is None:
-                # If activity has a gear_id but self.gear is None, it is modified
                 if activity_data['gear_id'] is not None:
                     logger.info("modif : gear_id (activity has a gear_id but gear is None)")
-                    modified = True
+                    changed.add('gear_id')
             else:
-                # If self.gear exists, compare strava_id
                 if self.gear.strava_id != activity_data['gear_id']:
                     logger.info("modif : gear_id (activity has a gear but gear_id has changed)")
-                    modified = True
+                    changed.add('gear_id')
 
-        return modified
+        return changed
 
     def sync_gear_details(self):
         """
