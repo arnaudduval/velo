@@ -94,6 +94,9 @@ function setYear(year) {
                 values: data.values,
                 textinfo: 'label+percent',
             }], {margin: {t: 20}}, {responsive: true});
+        }).fail(function() {
+            document.getElementById('pieChart').innerHTML =
+                '<p style="color:#c00;padding:1em">Impossible de charger le graphique.</p>';
         });
         </script>
     </div>
@@ -119,9 +122,9 @@ function setYear(year) {
         // --- Données filtrées par période ---
         var dataurl = "{% url 'all_sumtrack_json' %}?date_start={{ date_start }}&date_end={{ date_end }}";
         $.getJSON(dataurl, function (data) {
-                var feature = L.geoJson(data, {style: style}).addTo(map);
-                map.fitBounds(feature.getBounds());
-                    });
+            var feature = L.geoJson(data, {style: style}).addTo(map);
+            map.fitBounds(feature.getBounds());
+        }).fail(function() { console.error('Erreur chargement tracés'); });
     }
 </script>
 

@@ -47,17 +47,19 @@
         // --- Données ---
         var dataurl = "{% url 'track_json' activity.id %}";
         $.getJSON(dataurl, function (data) {
-                var feature = L.geoJson(data, {style: style}).addTo(map);
-                map.fitBounds(feature.getBounds());
-                    });
+            var feature = L.geoJson(data, {style: style}).addTo(map);
+            map.fitBounds(feature.getBounds());
+        }).fail(function() { console.error('Erreur chargement tracé GPS'); });
+
         dataurl = "{% url 'climbed_json' activity.id%}";
         $.getJSON(dataurl, function (data) {
-                var feature = L.geoJson(data, {onEachFeature: onEachFeature}).addTo(map);
-                    });
+            L.geoJson(data, {onEachFeature: onEachFeature}).addTo(map);
+        }).fail(function() { console.error('Erreur chargement cols'); });
+
         var tilesurl = "{% url 'visited_tiles_json' activity.id%}";
         $.getJSON(tilesurl, function (data) {
-                var feature = L.geoJson(data, {style: style}).addTo(map);
-                    });
+            L.geoJson(data, {style: style}).addTo(map);
+        }).fail(function() { console.error('Erreur chargement tuiles visitées'); });
     }
 </script>
 
@@ -183,6 +185,9 @@ $.get('{% url 'time_streams_json' activity.id %}', function(data) {
     });
 
     buildStreamChart();
+}).fail(function() {
+    document.getElementById('timeChart').innerHTML =
+        '<p style="color:#c00;padding:1em">Impossible de charger les streams.</p>';
 });
 
 $.get('{% url 'cp_curve_json' activity.id %}', function(data) {
@@ -192,6 +197,9 @@ $.get('{% url 'cp_curve_json' activity.id %}', function(data) {
         xaxis: Object.assign({type:'log', tickvals:data.tickvals, ticktext:data.ticktext, title:'Durée'}, spikeConfig),
         yaxis: {title:'Puissance (W)'},
     }, {responsive: true});
+}).fail(function() {
+    document.getElementById('cpChart').innerHTML =
+        '<p style="color:#c00;padding:1em">Impossible de charger la courbe CP.</p>';
 });
 </script>
 

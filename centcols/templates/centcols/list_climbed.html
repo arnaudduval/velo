@@ -50,9 +50,9 @@
         initMapControls(map);
         var dataurl = "{% url 'all_climbed_json' %}";
         $.getJSON(dataurl, function (data) {
-                var feature = L.geoJson(data, {onEachFeature: onEachFeature}).addTo(map);
-                map.fitBounds(feature.getBounds());
-                    });
+            var feature = L.geoJson(data, {onEachFeature: onEachFeature}).addTo(map);
+            map.fitBounds(feature.getBounds());
+        }).fail(function() { console.error('Erreur chargement cols'); });
     }
 </script>
 {% endblock %}
