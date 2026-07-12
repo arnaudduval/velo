@@ -7,71 +7,121 @@
 {% block head %}
     {% leaflet_js %}
     {% leaflet_css %}
+    <script src="{% static 'js/leaflet_common.js' %}"></script>
 {% endblock %}
 {% block content %}
-Nombre d'activités : {{ count }} <br>
-Distance totale : {{ distance|div:1000|floatformat:2 }} km<br>
-Temps total : {{ moving_time|formatSeconds }} <br>
-Temps total écoulé : {{ elapsed_time|formatSeconds }} <br>
-Eddington : {{ eddington }} <br>
-<h1>Indicateurs 2025</h1>
-<ul>
-    <li>Distance totale commute: {{ total_distance_commute|div:1000|floatformat:0 }} km</li>
-    <li>Distance totale sans HT: {{ total_distance_notrainer|div:1000|floatformat:0 }} km</li>
-    <li>Distance totale sans HT sans commute: {{ total_distance_notrainer_nocommute|div:1000|floatformat:0 }} km</li>
-    <li>D+ sans HT: {{ total_elevation_notrainer|floatformat:0 }} m</li>
-    <li>Temps total: {{ total_time  |formatSeconds }}</li>
-    <li>Temps total sans HT: {{ total_time_notrainer  |formatSeconds }}</li>
-    <li>Temps total sans commute: {{ total_time_nocommute  |formatSeconds }}</li>
-</ul>
+<h1>Indicateurs</h1>
 
-<div id="pieChart" style="width:500px;height:400px;"></div>
+<style>
+.period-selector { margin-bottom: 1.2em; }
+.period-selector .btn-group { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.period-selector button, .period-selector input[type=submit] {
+    padding: 4px 10px; border: 1px solid #aaa; border-radius: 4px;
+    background: #f5f5f5; cursor: pointer; font-size: 0.9em;
+}
+.period-selector button:hover, .period-selector input[type=submit]:hover { background: #ddd; }
+.period-selector button.active { background: #4a90d9; color: #fff; border-color: #3a7bc8; }
+.period-selector .date-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.period-selector .date-form label { font-size: 0.9em; }
+.period-selector .date-form input[type=date] { font-size: 0.9em; padding: 3px 6px; border: 1px solid #aaa; border-radius: 4px; }
+.period-label { font-size: 0.95em; color: #555; margin-bottom: 0.8em; }
+</style>
+
+<div class="period-selector">
+    <div class="btn-group">
+        <button onclick="setRelative(1)">Dernier mois</button>
+        <button onclick="setRelative(3)">3 derniers mois</button>
+        <button onclick="setRelative(6)">6 derniers mois</button>
+        <button onclick="setRelative(12)">12 derniers mois</button>
+        {% for year in years %}
+        <button onclick="setYear({{ year }})"
+            {% if date_start == year|stringformat:'s'|add:'-01-01' and date_end == year|stringformat:'s'|add:'-12-31' %}class="active"{% endif %}>
+            {{ year }}
+        </button>
+        {% endfor %}
+    </div>
+    <form method="get" class="date-form">
+        <label>Du <input type="date" name="date_start" value="{{ date_start }}"></label>
+        <label>au <input type="date" name="date_end" value="{{ date_end }}"></label>
+        <input type="submit" value="OK">
+    </form>
+</div>
+
 <script>
-$.get('{% url 'graph_test_json' %}', function(data) {
-    Plotly.newPlot('pieChart', [{
-        type: 'pie',
-        labels: data.labels,
-        values: data.values,
-        textinfo: 'label+percent',
-    }], {margin: {t: 20}}, {responsive: true});
-});
+function setPeriod(start, end) {
+    var url = new URL(window.location.href);
+    url.searchParams.set('date_start', start);
+    url.searchParams.set('date_end', end);
+    window.location.href = url.toString();
+}
+function setRelative(months) {
+    var today = new Date();
+    var end = today.toISOString().slice(0, 10);
+    var start = new Date(today);
+    start.setMonth(start.getMonth() - months);
+    setPeriod(start.toISOString().slice(0, 10), end);
+}
+function setYear(year) {
+    setPeriod(year + '-01-01', year + '-12-31');
+}
 </script>
 
-{% leaflet_map "main" callback="main_map_init" %}
+<p class="period-label">Période : {{ date_start_display }} → {{ date_end_display }}</p>
+
+<div style="display:flex; gap:24px; align-items:flex-start;">
+
+    <div style="min-width:320px; flex-shrink:0;">
+        <ul>
+            <li>Nombre d'activités : {{ count }}</li>
+            <li>Distance totale : {{ distance|div:1000|floatformat:2 }} km</li>
+            <li>Temps total : {{ moving_time|formatSeconds }}</li>
+            <li>Temps total écoulé : {{ elapsed_time|formatSeconds }}</li>
+            <li>Eddington : {{ eddington }}</li>
+            <li>Distance commute : {{ total_distance_commute|div:1000|floatformat:0 }} km</li>
+            <li>Distance sans HT : {{ total_distance_notrainer|div:1000|floatformat:0 }} km</li>
+            <li>Distance sans HT sans commute : {{ total_distance_notrainer_nocommute|div:1000|floatformat:0 }} km</li>
+            <li>D+ sans HT : {{ total_elevation_notrainer|floatformat:0 }} m</li>
+            <li>Temps Ride + VirtualRide : {{ total_time|formatSeconds }}</li>
+            <li>Temps sans HT : {{ total_time_notrainer|formatSeconds }}</li>
+            <li>Temps sans commute : {{ total_time_nocommute|formatSeconds }}</li>
+        </ul>
+        <div id="pieChart" style="width:360px;height:360px;"></div>
+        <script>
+        $.get("{% url 'graph_test_json' %}?date_start={{ date_start }}&date_end={{ date_end }}", function(data) {
+            Plotly.newPlot('pieChart', [{
+                type: 'pie',
+                labels: data.labels,
+                values: data.values,
+                textinfo: 'label+percent',
+            }], {margin: {t: 20}}, {responsive: true});
+        });
+        </script>
+    </div>
+
+    <div style="flex:1; min-width:0;">
+        <style>#main { height: 600px; }</style>
+        {% leaflet_map "main" callback="main_map_init" %}
+    </div>
+
+</div>
 
 
 <script type="text/javascript">
     function main_map_init (map, options) {
-        // Use Leaflet API here
-        /*var myLines = [{
-            "type": "LineString",
-            "coordinates": [[-100, 40], [-105, 45], [-110, 55]]
-            }, {
-            "type": "LineString",
-            "coordinates": [[-105, 40], [-110, 45], [-115, 55]]
-            }];
-
-        var myStyle = {
-            "color": "#ff7800",
-            "weight": 5,
-            "opacity": 0.65
-        };*/
         var style = {
             "color": "#ff0000",
             "weight": 2,
             "opacity": 1
             };
 
-        /*L.geoJSON(myLines, {
-            style: myStyle
-            }).addTo(map);*/
-        var dataurl = "{% url 'all_sumtrack_json' %}";
+        initMapControls(map);
+
+        // --- Données filtrées par période ---
+        var dataurl = "{% url 'all_sumtrack_json' %}?date_start={{ date_start }}&date_end={{ date_end }}";
         $.getJSON(dataurl, function (data) {
                 var feature = L.geoJson(data, {style: style}).addTo(map);
                 map.fitBounds(feature.getBounds());
                     });
-
-
     }
 </script>
 

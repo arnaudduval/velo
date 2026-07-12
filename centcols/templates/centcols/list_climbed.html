@@ -6,6 +6,7 @@
 {% block head %}
     {% leaflet_js %}
     {% leaflet_css %}
+    <script src="{% static 'js/leaflet_common.js' %}"></script>
 {% endblock %}
 {% block content %}
 <table class=list_table>
@@ -46,6 +47,7 @@
     }
 
     function main_map_init (map, options) {
+        initMapControls(map);
         var dataurl = "{% url 'all_climbed_json' %}";
         $.getJSON(dataurl, function (data) {
                 var feature = L.geoJson(data, {onEachFeature: onEachFeature}).addTo(map);

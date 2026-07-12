@@ -130,6 +130,7 @@ STATICFILES_DIRS = (
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LEAFLET_CONFIG = {
+    'RESET_VIEW': False,
     'TILES': [(
         'OpenTopoMap',
         'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',

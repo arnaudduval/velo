@@ -292,8 +292,25 @@ def visited_tiles_json(request, id):
     return HttpResponse(json.dumps(data), content_type="application/json")
 
 def all_sumtrack_json(request):
-    """Return JSON containing all activities summary track"""
-    activities = Activity.objects.exclude(summary_polyline = None)
+    """Return JSON containing all activities summary track, filtered by date range."""
+    date_start_str = request.GET.get('date_start', '')
+    date_end_str = request.GET.get('date_end', '')
+    try:
+        date_start = timezone.make_aware(datetime.strptime(date_start_str, '%Y-%m-%d'))
+    except ValueError:
+        date_start = None
+    try:
+        date_end = timezone.make_aware(
+            datetime.strptime(date_end_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+        )
+    except ValueError:
+        date_end = None
+
+    activities = Activity.objects.exclude(summary_polyline=None)
+    if date_start:
+        activities = activities.filter(startDate__gte=date_start)
+    if date_end:
+        activities = activities.filter(startDate__lte=date_end)
     dataset = []
 
     for activity in activities:
@@ -633,17 +650,30 @@ def delete_durability_indicator(request, id):
 
 
 def graph_test_json(request):
-    """Return activity type distribution as Plotly pie trace."""
-    rows = Activity.objects.order_by('Type').values('Type').distinct()
-    labels = []
-    values = []
-    for row in rows:
-        t = row['Type']
-        if t:
-            labels.append(t)
-            values.append(Activity.objects.filter(Type=t).count())
-    data = {'labels': labels, 'values': values}
-    return HttpResponse(json.dumps(data), content_type="application/json")
+    """Return activity type distribution as Plotly pie trace, filtered by date range."""
+    date_start_str = request.GET.get('date_start', '')
+    date_end_str = request.GET.get('date_end', '')
+    try:
+        date_start = timezone.make_aware(datetime.strptime(date_start_str, '%Y-%m-%d'))
+    except ValueError:
+        date_start = None
+    try:
+        date_end = timezone.make_aware(
+            datetime.strptime(date_end_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+        )
+    except ValueError:
+        date_end = None
+
+    qs = Activity.objects.all()
+    if date_start:
+        qs = qs.filter(startDate__gte=date_start)
+    if date_end:
+        qs = qs.filter(startDate__lte=date_end)
+
+    rows = qs.order_by('Type').values('Type').annotate(n=Count('id'))
+    labels = [r['Type'] for r in rows if r['Type']]
+    values = [r['n'] for r in rows if r['Type']]
+    return HttpResponse(json.dumps({'labels': labels, 'values': values}), content_type="application/json")
 
 
 def graph_test(request):
@@ -682,47 +712,75 @@ def graph_test(request):
 
 
 def indicators(request):
-    """Affichages de statistiques"""
-    activities = Activity.objects.all()
-    count=len(activities)
-    distance = activities.aggregate(Sum('distance'))['distance__sum']
-    moving_time = activities.aggregate(Sum('moving_time'))['moving_time__sum']
-    elapsed_time = activities.aggregate(Sum('elapsed_time'))['elapsed_time__sum']
+    """Affichages de statistiques filtrées par période."""
+    today = timezone.now().date()
 
-    # Compute Eddington score
+    # Liste des années disponibles en base
+    years = sorted(
+        {d.year for d in Activity.objects.dates('startDate', 'year')},
+        reverse=True,
+    )
+
+    # Période sélectionnée (défaut : année en cours)
+    date_start_str = request.GET.get('date_start', '')
+    date_end_str = request.GET.get('date_end', '')
+
+    try:
+        date_start = timezone.make_aware(datetime.strptime(date_start_str, '%Y-%m-%d'))
+    except ValueError:
+        date_start = timezone.make_aware(datetime(today.year, 1, 1))
+        date_start_str = date_start.strftime('%Y-%m-%d')
+
+    try:
+        date_end = timezone.make_aware(
+            datetime.strptime(date_end_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+        )
+    except ValueError:
+        date_end = timezone.make_aware(datetime(today.year, today.month, today.day, 23, 59, 59))
+        date_end_str = date_end.strftime('%Y-%m-%d')
+
+    activities = Activity.objects.filter(startDate__gte=date_start, startDate__lte=date_end)
+    count = activities.count()
+    distance = activities.aggregate(Sum('distance'))['distance__sum'] or 0
+    moving_time = activities.aggregate(Sum('moving_time'))['moving_time__sum'] or 0
+    elapsed_time = activities.aggregate(Sum('elapsed_time'))['elapsed_time__sum'] or 0
+
+    # Eddington sur la période
     eddington = 0
     while True:
-        if activities.annotate(day=TruncDay('startDate')).values('day').annotate(d=Sum('distance')).filter(d__gt=eddington*1000).count() < eddington:
+        if activities.annotate(day=TruncDay('startDate')).values('day').annotate(
+            d=Sum('distance')
+        ).filter(d__gt=eddington * 1000).count() < eddington:
             break
         eddington += 1
 
-    # Compute 2025 indicators
-    start_date = timezone.make_aware(datetime(2025, 1, 1))
-    end_date = timezone.make_aware(datetime(2025, 12, 31))
+    total_distance_commute = activities.filter(commute=True, Type="Ride").aggregate(Sum('distance'))['distance__sum'] or 0
+    total_distance_notrainer = activities.filter(trainer=False, Type="Ride").aggregate(Sum('distance'))['distance__sum'] or 0
+    total_distance_notrainer_nocommute = activities.filter(commute=False, trainer=False, Type="Ride").aggregate(Sum('distance'))['distance__sum'] or 0
+    total_elevation_notrainer = activities.filter(trainer=False, Type="Ride").aggregate(Sum('total_elevation_gain'))['total_elevation_gain__sum'] or 0
+    total_time = activities.filter(Q(Type="Ride") | Q(Type="VirtualRide")).aggregate(Sum('moving_time'))['moving_time__sum'] or 0
+    total_time_notrainer = activities.filter(trainer=False, Type="Ride").aggregate(Sum('moving_time'))['moving_time__sum'] or 0
+    total_time_nocommute = activities.filter(Q(commute=False, Type="Ride") | Q(Type="VirtualRide")).aggregate(Sum('moving_time'))['moving_time__sum'] or 0
 
-    activities_2025 = Activity.objects.filter(startDate__gte=start_date,startDate__lte=end_date)
-    total_distance_commute = activities_2025.filter(commute=True, Type="Ride").aggregate(Sum('distance'))['distance__sum']
-    total_distance_notrainer = activities_2025.filter(trainer=False, Type="Ride").aggregate(Sum('distance'))['distance__sum']
-    total_distance_notrainer_nocommute = activities_2025.filter(commute=False, trainer=False, Type="Ride").aggregate(Sum('distance'))['distance__sum']
-    total_elevation_notrainer = activities_2025.filter(trainer=False, Type="Ride").aggregate(Sum('total_elevation_gain'))['total_elevation_gain__sum']
-    total_time = activities_2025.filter(Q(Type="Ride")|Q(Type="VirtualRide")).aggregate(Sum('moving_time'))['moving_time__sum']
-    total_time_notrainer = activities_2025.filter(trainer=False, Type="Ride").aggregate(Sum('moving_time'))['moving_time__sum']
-    total_time_nocommute = activities_2025.filter(Q(commute=False, Type="Ride")|Q(Type="VirtualRide")).aggregate(Sum('moving_time'))['moving_time__sum']
-
-
-    return render(request, 'centcols/indicators.html', {'count': count,
-                                                        'distance': distance,
-                                                        'moving_time': moving_time,
-                                                        'elapsed_time': elapsed_time,
-                                                        'eddington': eddington,
-                                                        'total_distance_commute': total_distance_commute,
-                                                        'total_distance_notrainer': total_distance_notrainer,
-                                                        'total_distance_notrainer_nocommute': total_distance_notrainer_nocommute,
-                                                        'total_elevation_notrainer': total_elevation_notrainer,
-                                                        'total_time': total_time,
-                                                        'total_time_notrainer': total_time_notrainer,
-                                                        'total_time_nocommute': total_time_nocommute,
-                                                        })
+    return render(request, 'centcols/indicators.html', {
+        'count': count,
+        'distance': distance,
+        'moving_time': moving_time,
+        'elapsed_time': elapsed_time,
+        'eddington': eddington,
+        'total_distance_commute': total_distance_commute,
+        'total_distance_notrainer': total_distance_notrainer,
+        'total_distance_notrainer_nocommute': total_distance_notrainer_nocommute,
+        'total_elevation_notrainer': total_elevation_notrainer,
+        'total_time': total_time,
+        'total_time_notrainer': total_time_notrainer,
+        'total_time_nocommute': total_time_nocommute,
+        'years': years,
+        'date_start': date_start_str,
+        'date_end': date_end_str,
+        'date_start_display': date_start.strftime('%d/%m/%Y'),
+        'date_end_display': date_end.strftime('%d/%m/%Y'),
+    })
 
 def activities_climbed(request, id_col):
     """Affichage des activités où un col donné a été franchi"""

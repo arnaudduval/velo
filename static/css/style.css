@@ -184,5 +184,21 @@ nav > ul li:hover .sous
     margin-left: 2em
 }
 
+/* Messages Django (success, error, warning, info) */
+.messages {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.message {
+    padding: 10px 16px;
+    border-left: 4px solid transparent;
+    font-size: 0.95em;
+}
+.message--success  { background: #eaf7ea; border-color: #4caf50; color: #2e7d32; }
+.message--error    { background: #fdecea; border-color: #f44336; color: #b71c1c; }
+.message--warning  { background: #fff8e1; border-color: #ff9800; color: #e65100; }
+.message--info     { background: #e3f2fd; border-color: #2196f3; color: #0d47a1; }
+
 
 
